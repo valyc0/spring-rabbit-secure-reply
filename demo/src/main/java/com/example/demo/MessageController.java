@@ -18,7 +18,7 @@ public class MessageController {
     }
 
     @PostMapping("/messages")
-    public String send(@RequestBody String message) {
+    public String send(@RequestBody Notification message) {
         rabbitTemplate.convertAndSend(queue, message);
         return "Inviato: " + message;
     }

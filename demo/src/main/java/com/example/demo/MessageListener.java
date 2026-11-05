@@ -11,7 +11,7 @@ public class MessageListener {
     private static final Logger log = LoggerFactory.getLogger(MessageListener.class);
 
     @RabbitListener(queues = "${app.queue}")
-    public void receive(String message) {
+    public void receive(Notification message) {
         log.info("Messaggio ricevuto: {}", message);
     }
 }

@@ -48,31 +48,31 @@ L'app parte su `http://localhost:8080` e dichiara la coda `demo.queue` all'avvio
 
 ### 3. Inviare un messaggio
 
+Il messaggio è un record Java `Notification(String sender, String text, long timestamp)`, inviato come JSON.
+
+```bash
+./test.sh                          # sender "valerio", text "ciao rabbit", timestamp = ora
+./test.sh mario "altro messaggio"  # sender e text personalizzati
+```
+
+Che equivale a:
+
 ```bash
 curl -X POST http://localhost:8080/messages \
-  -H 'Content-Type: text/plain' \
-  -d 'ciao rabbit'
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"valerio","text":"ciao rabbit","timestamp":1730000000000}'
 ```
 
 Risposta:
 
 ```
-Inviato: ciao rabbit
+Inviato: Notification[sender=valerio, text=ciao rabbit, timestamp=1730000000000]
 ```
 
 Nel log dell'app comparirà:
 
 ```
-Messaggio ricevuto: ciao rabbit
-```
-
-Per mandarne più di uno:
-
-```bash
-for i in $(seq 1 5); do
-  curl -s -X POST http://localhost:8080/messages -H 'Content-Type: text/plain' -d "messaggio $i"
-  echo
-done
+Messaggio ricevuto: Notification[sender=valerio, text=ciao rabbit, timestamp=1730000000000]
 ```
 
 ## Verificare la coda
@@ -204,9 +204,10 @@ echo | openssl s_client -connect localhost:5671 -CAfile certs/ca.pem \
 ## Componenti
 
 - `DemoApplication` — entry point, dichiara la coda durable.
-- `RabbitConfig` — abilita l'autenticazione EXTERNAL (certificato client).
-- `MessageController` — `POST /messages`, usa `RabbitTemplate` per inviare il body in coda.
-- `MessageListener` — `@RabbitListener` sulla coda, logga ogni messaggio ricevuto.
+- `RabbitConfig` — abilita l'autenticazione EXTERNAL (certificato client) e registra il `Jackson2JsonMessageConverter` che converte i record da/verso JSON.
+- `Notification` — record con 2 `String` e un `long`: è il payload del messaggio.
+- `MessageController` — `POST /messages`, riceve il JSON come `Notification` e lo invia in coda con `RabbitTemplate`.
+- `MessageListener` — `@RabbitListener` sulla coda, riceve la `Notification` già deserializzata e la logga.
 
 ## Stop
 
