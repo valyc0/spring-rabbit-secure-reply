@@ -14,3 +14,4 @@ spring:
 
 app:
   queue: demo.queue
+  reply-queues: demo.reply.a,demo.reply.b   # code di risposta tra cui il chiamante REST puo' scegliere

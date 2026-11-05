@@ -51,29 +51,54 @@ L'app parte su `http://localhost:8080` e dichiara la coda `demo.queue` all'avvio
 Il messaggio è un record Java `Notification(String sender, String text, long timestamp)`, inviato come JSON.
 
 ```bash
-./test.sh                          # sender "valerio", text "ciao rabbit", timestamp = ora
-./test.sh mario "altro messaggio"  # sender e text personalizzati
+./test.sh                                    # nessuna risposta
+./test.sh valerio "ciao" demo.reply.a        # il listener risponde su demo.reply.a
+./test.sh valerio "ciao" demo.reply.b        # il listener risponde su demo.reply.b
 ```
 
-Che equivale a:
+Sintassi: `./test.sh [sender] [text] [replyTo]`. Equivale a:
 
 ```bash
-curl -X POST http://localhost:8080/messages \
+curl -X POST 'http://localhost:8080/messages?replyTo=demo.reply.a' \
   -H 'Content-Type: application/json' \
-  -d '{"sender":"valerio","text":"ciao rabbit","timestamp":1730000000000}'
+  -d '{"sender":"valerio","text":"ciao","timestamp":1730000000000}'
 ```
 
-Risposta:
+Nel log dell'app:
 
 ```
-Inviato: Notification[sender=valerio, text=ciao rabbit, timestamp=1730000000000]
+Messaggio ricevuto: Notification[sender=valerio, text=ciao, ...] (replyTo=demo.reply.a)
+Risposta A ricevuta: Notification[sender=listener, text=Re: ciao, ...]
 ```
 
-Nel log dell'app comparirà:
+Un `replyTo` diverso da quelli configurati risponde `400 Bad Request`.
+
+## Code e risposta (reply-to)
 
 ```
-Messaggio ricevuto: Notification[sender=valerio, text=ciao rabbit, timestamp=1730000000000]
+                 POST /messages?replyTo=demo.reply.a
+  client ───────────────────────────────▶ REST (MessageController)
+                                              │ invia Notification, imposta la proprietà AMQP replyTo
+                                              ▼
+                                         [demo.queue]
+                                              │
+                                              ▼
+                                 MessageListener.receive()
+                                  - logga il messaggio
+                                  - restituisce una Notification "Re: ..."
+                                              │ Spring AMQP la pubblica sulla coda indicata in replyTo
+                                              ▼
+                              [demo.reply.a]   oppure   [demo.reply.b]
+                                              │
+                                              ▼
+                                 receiveReplyA() / receiveReplyB()  (loggano la risposta)
 ```
+
+- **Chi decide la coda di risposta è il chiamante REST**, con `?replyTo=`. Il controller lo mette nella proprietà AMQP `replyTo` del messaggio.
+- Il listener non conosce le code di risposta: restituisce un oggetto e Spring AMQP lo invia a quella indicata in `replyTo`. Se `replyTo` manca restituisce `null` e non risponde.
+- Le code ammesse sono in `application.yml` (`app.reply-queues`, separate da virgola), vengono dichiarate all'avvio e il controller rifiuta qualsiasi altro nome: così un chiamante non può far scrivere il listener su code arbitrarie.
+- `receiveReplyA()` e `receiveReplyB()` consumano le due code di risposta solo per mostrare l'esempio; in un caso reale le risposte le leggerebbe un altro servizio.
+- Per aggiungere una coda di risposta basta aggiungerla a `app.reply-queues`.
 
 ## Verificare la coda
 
@@ -199,15 +224,16 @@ echo | openssl s_client -connect localhost:5671 -CAfile certs/ca.pem \
 | `spring.rabbitmq.host` | `localhost` | host RabbitMQ |
 | `spring.rabbitmq.port` | `5671` | porta AMQPS |
 | `spring.rabbitmq.ssl.*` | keystore/truststore in `certs/` | mTLS |
-| `app.queue` | `demo.queue` | nome della coda |
+| `app.queue` | `demo.queue` | coda di ingresso |
+| `app.reply-queues` | `demo.reply.a,demo.reply.b` | code di risposta selezionabili con `?replyTo=` |
 
 ## Componenti
 
 - `DemoApplication` — entry point, dichiara la coda durable.
 - `RabbitConfig` — abilita l'autenticazione EXTERNAL (certificato client) e registra il `Jackson2JsonMessageConverter` che converte i record da/verso JSON.
 - `Notification` — record con 2 `String` e un `long`: è il payload del messaggio.
-- `MessageController` — `POST /messages`, riceve il JSON come `Notification` e lo invia in coda con `RabbitTemplate`.
-- `MessageListener` — `@RabbitListener` sulla coda, riceve la `Notification` già deserializzata e la logga.
+- `MessageController` — `POST /messages?replyTo=...`, riceve il JSON come `Notification`, valida `replyTo` e invia in coda con `RabbitTemplate`.
+- `MessageListener` — `receive()` consuma `demo.queue` e risponde sulla coda `replyTo`; `receiveReplyA()` e `receiveReplyB()` consumano rispettivamente `demo.reply.a` e `demo.reply.b` e loggano.
 
 ## Stop
 
