@@ -17,3 +17,7 @@ target/
 
 # Env
 .env
+
+# Certificati generati (chiavi private)
+certs/*
+!certs/gen-certs.sh

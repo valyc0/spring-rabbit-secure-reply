@@ -1,9 +1,16 @@
 spring:
   rabbitmq:
     host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    port: 5671
+    ssl:
+      enabled: true
+      key-store: file:../certs/client.p12
+      key-store-type: PKCS12
+      key-store-password: ${CERT_PASS}
+      trust-store: file:../certs/truststore.p12
+      trust-store-type: PKCS12
+      trust-store-password: ${CERT_PASS}
+      verify-hostname: true
 
 app:
   queue: demo.queue

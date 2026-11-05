@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
-cd "$(dirname "$0")/demo" && mvn spring-boot:run
+set -e
+cd "$(dirname "$0")"
+set -a; source .env; set +a
+cd demo && mvn spring-boot:run
